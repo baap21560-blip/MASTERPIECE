@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Master piece all Edition</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), url('background.png') no-repeat center center fixed;
+            background-size: cover;
+            background-color: #222;
+            font-family: 'Arial Black', sans-serif;
+            
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            width: 100vw;
+            height: 100vh;
+            position: fixed;
+        }
+        canvas { 
+            display: block; 
+            background: transparent; 
+            touch-action: none;
+            width: 100%;
+            height: 100%;
+        }
+        #ui {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            pointer-events: none;
+            transition: opacity 0.5s;
+            z-index: 10;
+        }
+        #playButton {
+            pointer-events: auto;
+            padding: 15px 40px;
+            font-size: clamp(24px, 8vw, 45px); 
+            background: linear-gradient(to bottom, #ff9800, #ff5722);
+            color: white;
+            border: 4px solid #fff;
+            border-radius: 60px;
+            cursor: pointer;
+            box-shadow: 0 0 30px rgba(255, 87, 34, 0.6);
+            transition: transform 0.2s;
+        }
+        #playButton:hover { transform: scale(1.1); }
+        #scoreBoard {
+            position: absolute;
+            top: 20px; left: 20px;
+            color: #fff;
+            font-size: clamp(40px, 12vw, 80px); 
+            text-shadow: 0 0 15px #ff9800, 3px 3px 0px #000;
+            opacity: 0;
+            z-index: 10;
+        }
+        .title {
+            color: white;
+            font-size: clamp(50px, 15vw, 120px); 
+            text-shadow: 5px 5px 0px #ff5722;
+            margin: 0 0 30px 0;
+            letter-spacing: 2px;
+            text-align: center;
+        }
+        .dev-credit {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            color: rgba(255, 255, 255, 0.2);
+            font-size: 12px;
+            font-family: sans-serif;
+            letter-spacing: 1px;
+            pointer-events: none;
+            z-index: 5;
+            mix-blend-mode: overlay;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+
+<div class="dev-credit">DEV - MURPHX</div>
+<div id="scoreBoard">0</div>
+<div id="ui">
+    <h1 class="title">MELONI KI JAI</h1>
+    <button id="playButton">START</button>
+</div>
+
+<canvas id="gameCanvas"></canvas>
+
+<script>
+document.addEventListener('touchmove', function(e) { e.preventDefault(); }, { passive: false });
+
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const playBtn = document.getElementById("playButton");
+const uiLayer = document.getElementById("ui");
+const scoreBoard = document.getElementById("scoreBoard");
+
+function getRadius() {
+    return Math.min(window.innerWidth * 0.08, 70); 
+}
+let baseFruitRadius = getRadius();
+
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    baseFruitRadius = getRadius();
+}
+window.addEventListener("resize", resize);
+resize();
+
+let score = 0;
+let gameActive = false;
+let fruits = [];
+let slicedParticles = [];
+let explosionParticles = [];
+let juiceSplats = []; 
+let floatingDust = []; 
+let floatingTexts = []; 
+let slicePath = []; 
+let isSlicing = false;
+let shakeTime = 0;
+let timeScale = 1;
+let currentSwipeSliceCount = 0;
+
+const bgMusic = new Audio("background.mp3");
+bgMusic.loop = true;
+bgMusic.volume = 0.2; 
+const menuSound = new Audio("butki.mp3");
+let activeSounds = [];
+
+const fruitTypes = [
+    { name: "f1", imageSrc: "modiji1.png", soundSrc: "modiji1.mp3", color: "#ff2d2d" },
+    { name: "f2", imageSrc: "modiji2.png", soundSrc: "modiji2.mp3", color: "#ff69b4" },
+    { name: "f3", imageSrc: "terimaka.png", soundSrc: "terimaka.mp3", color: "#ffd700" },
+    { name: "f4", imageSrc: "cid3.png", soundSrc: "cid3.mp3", color: "#8a2be2" },
+    { name: "f5", imageSrc: "cid2.png", soundSrc: "cid2.mp3", color: "#00ff00" },
+    { name: "f6", imageSrc: "cid1.png", soundSrc: "cid1.mp3", color: "#32cd32" }
+];
+
+const bombImg = new Image(); bombImg.src = "bomb.png";
+fruitTypes.forEach(t => { t.image = new Image(); t.image.src = t.imageSrc; });
+
+for(let i=0; i<30; i++) {
+    floatingDust.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() * 2 + 1,
+        speed: Math.random() * 0.4 + 0.1,
+        opacity: Math.random()
+    });
+}
+
+function playSFX(src) {
+    if (!gameActive && src !== "explosion.mp3") return;
+    const sound = new Audio(src);
+    activeSounds.push(sound);
+    sound.play().catch(() => {});
+    sound.onended = () => activeSounds = activeSounds.filter(s => s !== sound);
+}
+
+function spawnFloatingText(x, y, text, color = "white") {
+    let textSize = Math.min(window.innerWidth * 0.08, 40);
+    floatingTexts.push({ x, y, text, color, life: 1, vy: -3, size: textSize });
+}
+
+playBtn.addEventListener('click', () => {
+    score = 0;
+    timeScale = 1;
+    scoreBoard.innerText = score;
+    gameActive = true;
+    uiLayer.style.opacity = "0";
+    scoreBoard.style.opacity = "1";
+    uiLayer.style.pointerEvents = "none";
+    fruits = [];
+    slicedParticles = [];
+    juiceSplats = [];
+    bgMusic.play().catch(() => {});
+});
+
+function spawnFruit() {
+    if (!gameActive || timeScale < 0.5) return;
+    const isBomb = Math.random() < 0.18;
+    const type = fruitTypes[Math.floor(Math.random() * fruitTypes.length)];
+    const isLeft = Math.random() > 0.5;
+    
+    fruits.push({
+        x: isLeft ? -60 : canvas.width + 60,
+        y: canvas.height + 60,
+        radius: baseFruitRadius, 
+        velocityX: isLeft ? (Math.random() * 4 + 4) : -(Math.random() * 4 + 4),
+        velocityY: -(Math.random() * 6 + 18), 
+        gravity: 0.35,
+        image: isBomb ? bombImg : type.image,
+        color: isBomb ? "black" : type.color,
+        isBomb: isBomb,
+        soundSrc: isBomb ? "explosion.mp3" : type.soundSrc,
+        sliced: false,
+        rotation: 0,
+        rotSpeed: (Math.random() - 0.5) * 0.2
+    });
+}
+
+function checkSlice(x, y) {
+    let speed = 0;
+    if (slicePath.length > 1) {
+        let last = slicePath[slicePath.length - 1];
+        speed = Math.hypot(x - last.x, y - last.y);
+    }
+    slicePath.push({ x, y, speed });
+
+    fruits.forEach((fruit, index) => {
+        let distance = Math.hypot(x - fruit.x, y - fruit.y);
+        if (distance < fruit.radius && !fruit.sliced) {
+            fruit.sliced = true;
+            if (fruit.isBomb) {
+                triggerGameOver(fruit);
+            } else {
+                playSFX(fruit.soundSrc);
+                currentSwipeSliceCount++;
+                score += currentSwipeSliceCount;
+                scoreBoard.innerText = score;
+
+                for(let i=0; i<8; i++) {
+                    juiceSplats.push({
+                        x: fruit.x, y: fruit.y,
+                        vx: (Math.random() - 0.5) * 15, vy: (Math.random() - 0.5) * 15,
+                        radius: Math.random() * 15 + 5, color: fruit.color, alpha: 1
+                    });
+                }
+                if(currentSwipeSliceCount > 1) {
+                    spawnFloatingText(fruit.x, fruit.y - 40, `COMBO X${currentSwipeSliceCount}`, "#ff9800");
+                }
+
+                for (let i = 0; i < 2; i++) {
+                    slicedParticles.push({
+                        x: fruit.x, y: fruit.y, radius: fruit.radius,
+                        vx: fruit.velocityX + (i === 0 ? -4 : 4),
+                        vy: fruit.velocityY - 5,
+                        gravity: 0.5, image: fruit.image, color: fruit.color,
+                        rotation: fruit.rotation, rotSpeed: (Math.random() - 0.5) * 0.4, side: i
+                    });
+                }
+                fruits.splice(index, 1);
+            }
+        }
+    });
+}
+
+function triggerGameOver(bomb) {
+    timeScale = 0.1; 
+    shakeTime = 60;
+    gameActive = false;
+    bgMusic.pause();
+    playSFX("explosion.mp3");
+    ctx.fillStyle = "white";
+    ctx.fillRect(0,0,canvas.width, canvas.height);
+    for (let i = 0; i < 60; i++) {
+        explosionParticles.push({
+            x: bomb.x, y: bomb.y, radius: Math.random() * 12 + 6,
+            vx: (Math.random() - 0.5) * 30, vy: (Math.random() - 0.5) * 30, life: 1.0
+        });
+    }
+    setTimeout(() => {
+        timeScale = 1;
+        uiLayer.style.opacity = "1";
+        uiLayer.style.pointerEvents = "auto";
+        playBtn.innerText = "TRY AGAIN";
+        menuSound.play().catch(() => {});
+    }, 1500);
+}
+
+function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    floatingDust.forEach(d => {
+        d.y -= d.speed * timeScale;
+        if(d.y < 0) d.y = canvas.height;
+        ctx.fillStyle = `rgba(255,255,255,${d.opacity})`;
+        ctx.beginPath(); ctx.arc(d.x, d.y, d.size, 0, Math.PI*2); ctx.fill();
+    });
+    if (shakeTime > 0) {
+        ctx.save();
+        ctx.translate(Math.random()*16 - 8, Math.random()*16 - 8);
+        shakeTime--;
+    }
+    for (let i = juiceSplats.length - 1; i >= 0; i--) {
+        let s = juiceSplats[i];
+        ctx.globalAlpha = s.alpha;
+        ctx.fillStyle = s.color;
+        ctx.beginPath(); ctx.arc(s.x, s.y, s.radius, 0, Math.PI*2); ctx.fill();
+        s.x += s.vx * timeScale; s.y += s.vy * timeScale; s.alpha -= 0.02 * timeScale;
+        if(s.alpha <= 0) juiceSplats.splice(i,1);
+    }
+    ctx.globalAlpha = 1;
+    for (let i = fruits.length - 1; i >= 0; i--) {
+        let f = fruits[i];
+        f.x += f.velocityX * timeScale; f.y += f.velocityY * timeScale; f.velocityY += f.gravity * timeScale;
+        f.rotation += f.rotSpeed * timeScale;
+        ctx.save();
+        ctx.translate(f.x, f.y); ctx.rotate(f.rotation);
+        ctx.drawImage(f.image, -f.radius, -f.radius, f.radius*2, f.radius*2);
+        ctx.restore();
+        if(f.y > canvas.height + 120) fruits.splice(i, 1);
+    }
+    for (let i = slicedParticles.length - 1; i >= 0; i--) {
+        let p = slicedParticles[i];
+        p.x += p.vx * timeScale; p.y += p.vy * timeScale; p.vy += p.gravity * timeScale;
+        p.rotation += p.rotSpeed * timeScale;
+        ctx.save();
+        ctx.translate(p.x, p.y); ctx.rotate(p.rotation);
+        ctx.beginPath();
+        if (p.side === 0) ctx.rect(-p.radius, -p.radius, p.radius, p.radius * 2);
+        else ctx.rect(0, -p.radius, p.radius, p.radius * 2);
+        ctx.clip();
+        ctx.drawImage(p.image, -p.radius, -p.radius, p.radius * 2, p.radius * 2);
+        ctx.restore();
+        if(p.y > canvas.height + 120) slicedParticles.splice(i, 1);
+    }
+    for (let i = explosionParticles.length - 1; i >= 0; i--) {
+        let p = explosionParticles[i];
+        ctx.fillStyle = `rgba(255, ${180*p.life}, 0, ${p.life})`;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2); ctx.fill();
+        p.x += p.vx; p.y += p.vy; p.life -= 0.02;
+        if(p.life <= 0) explosionParticles.splice(i, 1);
+    }
+    for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        let t = floatingTexts[i];
+        ctx.globalAlpha = t.life;
+        ctx.fillStyle = t.color;
+        ctx.font = `bold ${t.size}px Arial Black`;
+        ctx.textAlign = "center";
+        ctx.fillText(t.text, t.x, t.y);
+        t.y += t.vy; t.life -= 0.03;
+        if(t.life <= 0) floatingTexts.splice(i, 1);
+    }
+    ctx.globalAlpha = 1;
+    if (shakeTime > 0) ctx.restore();
+    if (slicePath.length > 1) {
+        ctx.lineJoin = "round"; ctx.lineCap = "round";
+        for (let i = 1; i < slicePath.length; i++) {
+            let p1 = slicePath[i-1]; let p2 = slicePath[i];
+            let ratio = i / slicePath.length;
+            ctx.beginPath();
+            ctx.strokeStyle = p2.speed > 35 ? `rgba(255, ${150 + ratio*105}, 0, ${ratio})` : `rgba(255, 255, 255, ${ratio})`;
+            ctx.lineWidth = (p2.speed / 4) * ratio + 3;
+            ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+            ctx.stroke();
+        }
+    }
+    if (!isSlicing && slicePath.length > 0) slicePath.shift();
+    if (slicePath.length > 25) slicePath.shift();
+    requestAnimationFrame(animate);
+}
+
+function startSlice(x, y) { isSlicing = true; currentSwipeSliceCount = 0; slicePath = [{ x, y, speed: 0 }]; }
+function endSlice() { isSlicing = false; }
+
+canvas.addEventListener("mousedown", (e) => startSlice(e.clientX, e.clientY));
+window.addEventListener("mouseup", endSlice);
+canvas.addEventListener("mousemove", (e) => { if (isSlicing) checkSlice(e.clientX, e.clientY); });
+canvas.addEventListener("touchstart", (e) => { e.preventDefault(); startSlice(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+canvas.addEventListener("touchmove", (e) => { e.preventDefault(); checkSlice(e.touches[0].clientX, e.touches[0].clientY); }, {passive:false});
+canvas.addEventListener("touchend", endSlice);
+
+setInterval(spawnFruit, 900);
+animate();
+</script>
+</body>
+</html>
