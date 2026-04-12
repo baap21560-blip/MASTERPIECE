@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -18,6 +17,7 @@
             background-size: cover;
             background-color: #222;
             font-family: 'Arial Black', sans-serif;
+            
             user-select: none;
             -webkit-user-select: none;
             touch-action: none;
@@ -29,6 +29,8 @@
             display: block; 
             background: transparent; 
             touch-action: none;
+            width: 100%;
+            height: 100%;
         }
         #ui {
             position: absolute;
@@ -89,7 +91,7 @@
 <div class="dev-credit">DEV - MURPHX</div>
 <div id="scoreBoard">0</div>
 <div id="ui">
-    <h1 class="title">MELONI JI KI JAI</h1>
+    <h1 class="title">MELONI KI JAI</h1>
     <button id="playButton">START</button>
 </div>
 
@@ -104,32 +106,16 @@ const playBtn = document.getElementById("playButton");
 const uiLayer = document.getElementById("ui");
 const scoreBoard = document.getElementById("scoreBoard");
 
-let screenWidth = window.innerWidth;
-let screenHeight = window.innerHeight;
-
 function getRadius() {
     return Math.min(window.innerWidth * 0.08, 70); 
 }
 let baseFruitRadius = getRadius();
 
 function resize() {
-    const dpr = window.devicePixelRatio || 1;
-
-    screenWidth = window.innerWidth;
-    screenHeight = window.innerHeight;
-
-    canvas.width = screenWidth * dpr;
-    canvas.height = screenHeight * dpr;
-
-    canvas.style.width = screenWidth + "px";
-    canvas.style.height = screenHeight + "px";
-
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.scale(dpr, dpr);
-
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
     baseFruitRadius = getRadius();
 }
-
 window.addEventListener("resize", resize);
 resize();
 
@@ -149,7 +135,7 @@ let currentSwipeSliceCount = 0;
 
 const bgMusic = new Audio("background.mp3");
 bgMusic.loop = true;
-bgMusic.volume = 0.2; 
+bgMusic.volume = 0.4; 
 const menuSound = new Audio("butki.mp3");
 let activeSounds = [];
 
@@ -166,20 +152,15 @@ const fruitTypes = [
 const bombImg = new Image(); bombImg.src = "bomb.png";
 fruitTypes.forEach(t => { t.image = new Image(); t.image.src = t.imageSrc; });
 
-
-function initDust() {
-    floatingDust = [];
-    for(let i=0; i<25; i++) {
-        floatingDust.push({
-            x: Math.random() * screenWidth,
-            y: Math.random() * screenHeight,
-            size: Math.random() * 1.5 + 0.5,
-            speed: Math.random() * 0.3 + 0.1,
-            opacity: Math.random() * 0.5
-        });
-    }
+for(let i=0; i<30; i++) {
+    floatingDust.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() * 2 + 1,
+        speed: Math.random() * 0.4 + 0.1,
+        opacity: Math.random()
+    });
 }
-initDust();
 
 function playSFX(src) {
     if (!gameActive && src !== "explosion.mp3") return;
@@ -215,8 +196,8 @@ function spawnFruit() {
     const isLeft = Math.random() > 0.5;
     
     fruits.push({
-        x: isLeft ? -60 : screenWidth + 60,
-        y: screenHeight + 60,
+        x: isLeft ? -60 : canvas.width + 60,
+        y: canvas.height + 60,
         radius: baseFruitRadius, 
         velocityX: isLeft ? (Math.random() * 4 + 4) : -(Math.random() * 4 + 4),
         velocityY: -(Math.random() * 6 + 18), 
@@ -268,8 +249,7 @@ function checkSlice(x, y) {
                         vx: fruit.velocityX + (i === 0 ? -4 : 4),
                         vy: fruit.velocityY - 5,
                         gravity: 0.5, image: fruit.image, color: fruit.color,
-                        rotation: fruit.rotation, rotSpeed: (Math.random() - 0.5) * 0.4, side: i,
-                        spawnTime: Date.now()
+                        rotation: fruit.rotation, rotSpeed: (Math.random() - 0.5) * 0.4, side: i
                     });
                 }
                 fruits.splice(index, 1);
@@ -278,7 +258,7 @@ function checkSlice(x, y) {
     });
 }
 
-function triggerGameOver(fruit) {
+function triggerGameOver(bomb) {
     timeScale = 0.1; 
     shakeTime = 60;
     gameActive = false;
@@ -288,7 +268,7 @@ function triggerGameOver(fruit) {
     ctx.fillRect(0,0,canvas.width, canvas.height);
     for (let i = 0; i < 60; i++) {
         explosionParticles.push({
-            x: fruit.x, y: fruit.y, radius: Math.random() * 12 + 6,
+            x: bomb.x, y: bomb.y, radius: Math.random() * 12 + 6,
             vx: (Math.random() - 0.5) * 30, vy: (Math.random() - 0.5) * 30, life: 1.0
         });
     }
@@ -303,21 +283,17 @@ function triggerGameOver(fruit) {
 
 function animate() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-  
     floatingDust.forEach(d => {
         d.y -= d.speed * timeScale;
-        if(d.y < -10) d.y = screenHeight + 10;
+        if(d.y < 0) d.y = canvas.height;
         ctx.fillStyle = `rgba(255,255,255,${d.opacity})`;
         ctx.beginPath(); ctx.arc(d.x, d.y, d.size, 0, Math.PI*2); ctx.fill();
     });
-
     if (shakeTime > 0) {
         ctx.save();
         ctx.translate(Math.random()*16 - 8, Math.random()*16 - 8);
         shakeTime--;
     }
-
     for (let i = juiceSplats.length - 1; i >= 0; i--) {
         let s = juiceSplats[i];
         ctx.globalAlpha = s.alpha;
@@ -327,7 +303,6 @@ function animate() {
         if(s.alpha <= 0) juiceSplats.splice(i,1);
     }
     ctx.globalAlpha = 1;
-
     for (let i = fruits.length - 1; i >= 0; i--) {
         let f = fruits[i];
         f.x += f.velocityX * timeScale; f.y += f.velocityY * timeScale; f.velocityY += f.gravity * timeScale;
@@ -336,9 +311,8 @@ function animate() {
         ctx.translate(f.x, f.y); ctx.rotate(f.rotation);
         ctx.drawImage(f.image, -f.radius, -f.radius, f.radius*2, f.radius*2);
         ctx.restore();
-        if(f.y > screenHeight + 150) fruits.splice(i, 1);
+        if(f.y > canvas.height + 120) fruits.splice(i, 1);
     }
-
     for (let i = slicedParticles.length - 1; i >= 0; i--) {
         let p = slicedParticles[i];
         p.x += p.vx * timeScale; p.y += p.vy * timeScale; p.vy += p.gravity * timeScale;
@@ -351,13 +325,8 @@ function animate() {
         ctx.clip();
         ctx.drawImage(p.image, -p.radius, -p.radius, p.radius * 2, p.radius * 2);
         ctx.restore();
-        
-       
-        const isOffScreen = (p.y > screenHeight + 200 || p.x < -200 || p.x > screenWidth + 200);
-        const isTooOld = (Date.now() - p.spawnTime > 4000); 
-        if(isOffScreen || isTooOld) slicedParticles.splice(i, 1);
+        if(p.y > canvas.height + 120) slicedParticles.splice(i, 1);
     }
-
     for (let i = explosionParticles.length - 1; i >= 0; i--) {
         let p = explosionParticles[i];
         ctx.fillStyle = `rgba(255, ${180*p.life}, 0, ${p.life})`;
@@ -365,7 +334,6 @@ function animate() {
         p.x += p.vx; p.y += p.vy; p.life -= 0.02;
         if(p.life <= 0) explosionParticles.splice(i, 1);
     }
-
     for (let i = floatingTexts.length - 1; i >= 0; i--) {
         let t = floatingTexts[i];
         ctx.globalAlpha = t.life;
@@ -376,10 +344,8 @@ function animate() {
         t.y += t.vy; t.life -= 0.03;
         if(t.life <= 0) floatingTexts.splice(i, 1);
     }
-
     ctx.globalAlpha = 1;
     if (shakeTime > 0) ctx.restore();
-
     if (slicePath.length > 1) {
         ctx.lineJoin = "round"; ctx.lineCap = "round";
         for (let i = 1; i < slicePath.length; i++) {
